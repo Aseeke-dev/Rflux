@@ -13,4 +13,4 @@ class Movie(Base):
     
     embeddings = Column(Vector(384), nullable=True)
     
-    ratings = relationship("Rating", back_populates="user", cascade="all, delete-orphan")
+    ratings = relationship("Rating", back_populates="movie", cascade="all, delete-orphan")
