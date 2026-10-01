@@ -13,3 +13,5 @@ SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_co
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
         yield session
+        
+#docker exec -it rflux-db psql -U postgres -d rflux_db

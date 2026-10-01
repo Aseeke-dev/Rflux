@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 class MovieBase(BaseModel):
     title: str
     genres: str
-    overview: str
+    overview: Optional[str] = None
     
 class MovieResponse(MovieBase):
     id: int
