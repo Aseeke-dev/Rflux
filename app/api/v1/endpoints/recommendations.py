@@ -11,6 +11,10 @@ from app.schemas.rating import RatingCreate, RatingResponse
 from app.schemas.recommendation import ReccommendationListResponse
 from app.services.recommendation import RecommendationService
 from app.models.rating import Rating
+import redis.asyncio as redis
+from app.services.cache import CacheService
+from app.core.redis import get_redis
+
 
 router = APIRouter()
 
@@ -49,8 +53,16 @@ def _coerce_top_rated_movie(movie: Any, avg_rating: float, rating_count: int) ->
 async def get_for_you_recommendations(
     user_id: int,
     limit: int = Query(default=5, ge=1, le=20),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis)
 ):
+    cache_key = f"rec:for_you:{user_id}"
+
+    cached_response = await CacheService.get_cache(redis_client, cache_key)
+    if cached_response:
+        cached_response["source"] = "cache"
+        return cached_response
+    
     service = RecommendationService()
     recommendations = await service.get_for_you_recommendations(db=db, user_id=user_id, limit=limit)
     
@@ -61,6 +73,15 @@ async def get_for_you_recommendations(
         )
 
     formatted_recs = [_coerce_movie_recommendation(movie, score) for movie, score in recommendations]
+    
+    response_payload = {
+        "user_id": user_id,
+        "feature_type": "for_you",
+        "recommendations": formatted_recs,
+        "source": "database",
+    }
+    
+    await CacheService.set_cache(redis_client, cache_key, response_payload, ttl=3600)
 
     return ReccommendationListResponse(
         user_id=user_id,
@@ -123,6 +144,7 @@ async def get_movies_by_genre(
 async def create_rating(
     rating_in: RatingCreate,
     db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ):
     rating = Rating(
         user_id=rating_in.user_id,
@@ -132,4 +154,7 @@ async def create_rating(
     db.add(rating)
     await db.commit()
     await db.refresh(rating)
+    
+    await CacheService.invalidate_user_cache(redis_client, rating_in.user_id)
+    
     return rating
